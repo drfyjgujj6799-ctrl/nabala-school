@@ -260,6 +260,32 @@ const SECTIONS = [
     {key:'email', label:'البريد الإلكتروني', type:'email'},
   ]},
 ];
+/* ================= مزامنة مباشرة مع Google Sheets =================
+   ضع هنا رابط الويب أب (Web App URL) بعد نشر سكربت Google Apps Script
+   (الخطوات موجودة برسالة Claude). خله فاضي '' إذا ما تريد هذي الميزة.
+*/
+const GOOGLE_SHEET_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbyK0DyH7wN6I57749_hOwhATqJIyLCc4TFVjagOGq4wgTr0w427WLWkZv0l8Xbnq4PU/exec';
+
+function buildSheetRow(payload, reqNum){
+  const headers = ['رقم الطلب','تاريخ التقديم', ...ALL_FIELDS.map(f=>f.label)];
+  const submitted = payload.submittedAt ? new Date(payload.submittedAt).toLocaleString('ar-EG') : '';
+  const row = [reqNum||'', submitted, ...ALL_FIELDS.map(f=>payload[f.key]||'')];
+  return { headers, row };
+}
+
+function syncToGoogleSheet(payload, reqNum){
+  if(!GOOGLE_SHEET_WEBHOOK_URL) return;
+  try{
+    const data = buildSheetRow(payload, reqNum);
+    fetch(GOOGLE_SHEET_WEBHOOK_URL, {
+      method:'POST',
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify(data)
+    });
+  }catch(e){ /* لا نوقف الإرسال إذا فشلت المزامنة */ }
+}
+
 const ALL_FIELDS = [
   {key:'grade', label:'الصف الدراسي', type:'text', required:true},
   {key:'section', label:'الشعبة', type:'text', required:true},
@@ -711,6 +737,7 @@ async function onAppClick(e){
       const reqNum = await generateRequestNumber();
       const payload = { ...state.formData, requestNumber:reqNum, submittedAt: Date.now(), status:'قيد المراجعة', source:'student' };
       await Store.addRequest(reqNum, payload);
+      syncToGoogleSheet(payload, reqNum);
       state.successReqNumber = reqNum;
       state.screen = 'student-success';
     }catch(err){
@@ -814,6 +841,7 @@ async function onAppClick(e){
         payload = { ...state.formData, requestNumber:id };
       }
       await Store.updateRequest(id, payload);
+      if(state.formMode==='add'){ syncToGoogleSheet(payload, id); }
       state.requests = await Store.listRequests();
       state.filtered = null;
       state.formError='';
