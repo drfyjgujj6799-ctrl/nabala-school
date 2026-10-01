@@ -588,6 +588,7 @@ function renderAdminDashboard(){
     </tr>`).join('');
   return `
   ${topbar(true)}
+  ${state.adminError ? `<div class="error-box">${escapeHtml(state.adminError)}</div>` : ''}
   <div class="stats-row">
     <div class="stat-card"><div class="num">${state.requests.length}</div><div class="lbl">إجمالي الطلبات</div></div>
     <div class="stat-card"><div class="num">${todayCount}</div><div class="lbl">طلبات اليوم</div></div>
@@ -747,7 +748,13 @@ async function onAppClick(e){
   }
   else if(action==='admin-refresh'){
     setBusy(true);
-    try{ state.requests = await Store.listRequests(); state.filtered=null; }catch(err){}
+    try{
+      state.requests = await Store.listRequests();
+      state.filtered=null;
+      state.adminError='';
+    }catch(err){
+      state.adminError = 'تعذر تحديث القائمة: '+(err&&err.message?err.message:'خطأ غير معروف');
+    }
     setBusy(false); render();
   }
   else if(action==='do-search'){
@@ -825,7 +832,6 @@ async function onAppClick(e){
 }
 
 async function exportToExcel(list){
-  if(!downloads){ alert('ميزة تنزيل الملفات غير متاحة في هذا العرض حالياً.'); return; }
   if(!list.length){ alert('لا توجد بيانات لتصديرها.'); return; }
   const headers = ['رقم الطلب','تاريخ التقديم', ...ALL_FIELDS.map(f=>f.label)];
   const rows = list.map(r=>{
@@ -839,7 +845,14 @@ async function exportToExcel(list){
   XLSX.utils.book_append_sheet(wb, ws, 'الطلبات');
   const arrBuf = XLSX.write(wb, { bookType:'xlsx', type:'array' });
   const blob = new Blob([arrBuf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  await downloads.save({ filename:'طلبات_الطلاب.xlsx', data: blob });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'طلبات_الطلاب.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
 }
 
 /* ================= بدء التشغيل ================= */
